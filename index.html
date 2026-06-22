@@ -39,10 +39,7 @@
                             <stop offset="100%" stop-color="#e74c3c" />
                         </linearGradient>
                     </defs>
-                    <!-- Arco de colores del fondo -->
                     <path d="M 25 130 A 105 105 0 0 1 235 130" fill="none" stroke="url(#gauge-grad)" stroke-width="16" stroke-linecap="round"/>
-                    
-                    <!-- La aguja controlada por coordenadas fijas (X2, Y2) -->
                     <line id="linea-aguja" x1="130" y1="130" x2="30" y2="130" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
                     <circle cx="130" cy="130" r="7" fill="#ffffff"/>
                 </svg>
@@ -62,10 +59,10 @@
         </div>
     </div>
 
-    <!-- BOTÓN OCULTO DE EMERGENCIA (Solo aparece si el navegador olvida el Arduino) -->
-    <div style="text-align: center; margin-top: 30px;">
-        <button id="btn-usb" onclick="vincularPuertoPorUnicaVez()" style="display: none; background-color: #2ecc71; color: #0d0d0d; border: none; padding: 12px 25px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 14px; text-transform: uppercase;">Vincular Cable Arduino</button>
+    <div id="contenedor-boton" style="text-align: center; margin-top: 30px; display: none;">
+        <button id="btn-usb" onclick="vincularPuertoPorUnicaVez()" style="background-color: #2ecc71; color: #0d0d0d; border: none; padding: 12px 25px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 14px; text-transform: uppercase;">Vincular Cable Arduino</button>
     </div>
+
 
     <script>
         const statusDiv = document.getElementById('status');
@@ -76,7 +73,7 @@
         const urlFirebase = "https://firebaseio.com";
         let usandoCableLocal = false;
 
-        // Mueve tu aguja con tu fórmula intacta
+        // Mueve tu aguja con tu fórmula matemática intacta
         function moverMiAguja(tNum) {
             if(lineaAguja) {
                 const anguloGrad = (tNum * 1.8) - 180;
@@ -88,7 +85,7 @@
             }
         }
 
-        // MODO VISOR: Para tu hermano en Brasil (Lee la nube cada segundo)
+        // MODO VISOR: Para celulares y tu hermano en Brasil (Lee la nube cada segundo)
         function leerDesdeInternet() {
             if (usandoCableLocal) return; 
 
@@ -109,14 +106,14 @@
                 });
         }
 
-        // PROCESADOR DEL FLUJO DE DATOS DEL ARDUINO NANO
+        // PROCESADOR DEL CABLE USB (Solo se ejecuta en tu PC de escritorio)
         async function procesarFlujoCable(puerto) {
             try {
                 await puerto.open({ baudRate: 9600 });
                 usandoCableLocal = true;
                 statusDiv.textContent = 'ONLINE (CABLE DIRECTO + ENVIANDO)';
                 statusDiv.style.color = '#2ecc71';
-                document.getElementById('btn-usb').style.display = 'none';
+                document.getElementById('contenedor-boton').style.display = 'none';
 
                 const textDecoder = new TextDecoderStream();
                 puerto.readable.pipeTo(textDecoder.writable);
@@ -141,12 +138,11 @@
                                 const hNum = parseFloat(fragmentos.shift());
                                 
                                 if (!isNaN(tNum) && !isNaN(hNum)) {
-                                    // Actualiza tu pantalla local en la PC
                                     if(tempSpan) tempSpan.textContent = tNum.toFixed(1);
                                     if(humSpan) humSpan.textContent = hNum.toFixed(1);
                                     moverMiAguja(tNum);
                                     
-                                    // Manda los números a internet para Brasil en milisegundos
+                                    // Manda los números a la nube en tiempo real
                                     fetch(urlFirebase, {
                                         method: "PUT",
                                         body: JSON.stringify({ temperatura: tNum, humedad: hNum })
@@ -162,28 +158,32 @@
             }
         }
 
-        // CONEXIÓN AUTOMÁTICA (Sin hacer clic en nada)
-        async function comprobarConexionDirecta() {
-            if ("serial" in navigator) {
-                const puertosDisponibles = await navigator.serial.getPorts();
-                
-                // Si el navegador ya recuerda tu Arduino de antes, se conecta SOLO
-                if (puertosDisponibles.length > 0) {
-                    procesarFlujoCable(puertosDisponibles[0]);
-                } else {
-                    // Si no lo conoce (como en la cel de tu hermano), actúa como visor
-                    document.getElementById('btn-usb').style.display = 'inline-block';
+        // ARQUITECTURA INTELIGENTE: Separa por completo Computadora de Celular
+        async function arrancarTableroGenuino() {
+            // DETECCIÓN: Si es una PC con soporte USB Serie
+            if ("serial" in navigator && window.location.protocol !== "http:") {
+                try {
+                    const puertosDisponibles = await navigator.serial.getPorts();
+                    if (puertosDisponibles.length > 0) {
+                        procesarFlujoCable(puertosDisponibles[0]);
+                    } else {
+                        // Muestra el botón verde de vinculación solo en tu PC la primera vez
+                        document.getElementById('contenedor-boton').style.display = 'block';
+                        setInterval(leerDesdeInternet, 1000);
+                        leerDesdeInternet();
+                    }
+                } catch (e) {
+                    // Si falla el escaneo, entra directo en modo visor de internet
                     setInterval(leerDesdeInternet, 1000);
                     leerDesdeInternet();
                 }
             } else {
-                // Celulares o navegadores sin cables leen directo de internet
+                // SI ES UN CELULAR (Entra directo aquí sin evaluar cables ni arrojar errores)
                 setInterval(leerDesdeInternet, 1000);
                 leerDesdeInternet();
             }
         }
 
-        // Por si acaso se borró la memoria del navegador, este botón te vuelve a vincular directo
         async function vincularPuertoPorUnicaVez() {
             try {
                 const puerto = await navigator.serial.requestPort();
@@ -193,8 +193,8 @@
             }
         }
 
-        // Arranca el escaneo directo en frío apenas abres la página
-        comprobarConexionDirecta();
+        // Ejecución inmediata al cargar la URL
+        arrancarTableroGenuino();
     </script>
 </body>
 </html>
