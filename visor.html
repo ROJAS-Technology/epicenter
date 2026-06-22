@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>THE EPICENTER - VISOR IoT</title>
+    <style>
+        body { background-color: #0d0d0d; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 1000px; margin: 0 auto 30px auto; }
+        h1 { font-size: 24px; letter-spacing: 1px; margin: 0; text-transform: uppercase; }
+        #status { font-weight: bold; font-size: 14px; letter-spacing: 1px; }
+        .dashboard { display: flex; justify-content: center; gap: 30px; max-width: 1000px; margin: 0 auto; }
+        .card { background-color: #16161a; border: 1px solid #26262b; border-radius: 8px; width: 400px; height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 30px; box-sizing: border-box; }
+        .card h3 { font-size: 12px; color: #a0a0a5; margin: 0; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.5px; }
+        .value { font-size: 42px; font-weight: bold; margin-bottom: 10px; color: #ffffff; }
+        .gauge-box { position: relative; width: 260px; height: 130px; margin-top: 15px; }
+        .gauge-svg { width: 100%; height: 100%; }
+        .drop-box { width: 100px; height: 110px; display: flex; align-items: center; justify-content: center; }
+        .drop-svg { width: 90px; height: 110px; fill: #4187f5; animation: flotarGota 2s ease-in-out infinite; }
+        @keyframes flotarGota { 0% { transform: translateY(0px); } 50% { transform: translateY(-8px); } 100% { transform: translateY(0px); } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>The Epicenter (Visor)</h1>
+        <div id="status" style="color: #ff3333;">CONECTANDO...</div>
+    </div>
+
+    <div class="dashboard">
+        <div class="card">
+            <h3>Temperatura Sensor</h3>
+            <div class="gauge-box">
+                <svg class="gauge-svg" viewBox="0 0 260 130">
+                    <defs>
+                        <linearGradient id="gauge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#2ecc71" />
+                            <stop offset="50%" stop-color="#f1c40f" />
+                            <stop offset="100%" stop-color="#e74c3c" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 25 130 A 105 105 0 0 1 235 130" fill="none" stroke="url(#gauge-grad)" stroke-width="16" stroke-linecap="round"/>
+                    <line id="linea-aguja" x1="130" y1="130" x2="30" y2="130" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+                    <circle cx="130" cy="130" r="7" fill="#ffffff"/>
+                </svg>
+            </div>
+            <div class="value"><span id="temp">--.-</span> °C</div>
+        </div>
+
+        <div class="card">
+            <h3>Humedad Ambiental</h3>
+            <div class="drop-box">
+                <svg class="drop-svg" viewBox="0 0 30 40">
+                    <path d="M15 3 Q15 3 23 15 A10 10 0 1 1 7 15 Q15 3 15 3 Z"/>
+                </svg>
+            </div>
+            <div class="value"><span id="hum">--.-</span> %</div>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const tempSpan = document.getElementById('temp');
+        const humSpan = document.getElementById('hum');
+        const lineaAguja = document.getElementById('linea-aguja');
+        
+        const urlFirebase = "https://firebaseio.com";
+
+        function moverMiAguja(tNum) {
+            if(lineaAguja) {
+                const anguloGrad = (tNum * 1.8) - 180;
+                const anguloRad = anguloGrad * (Math.PI / 180);
+                const nuevoX2 = 130 + 100 * Math.cos(anguloRad);
+                const nuevoY2 = 130 + 100 * Math.sin(anguloRad);
+                lineaAguja.setAttribute('x2', nuevoX2);
+                lineaAguja.setAttribute('y2', nuevoY2);
+            }
+        }
+
+        function leerDesdeInternet() {
+            fetch(urlFirebase)
+                .then(response => response.json())
+                .then(data => {
+                    if (data) {
+                        statusDiv.textContent = 'ONLINE (INTERNET)';
+                        statusDiv.style.color = '#2ecc71';
+                        if(tempSpan) tempSpan.textContent = parseFloat(data.temperatura).toFixed(1);
+                        if(humSpan) humSpan.textContent = parseFloat(data.humedad).toFixed(1);
+                        moverMiAguja(parseFloat(data.temperatura));
+                    }
+                })
+                .catch(e => {
+                    statusDiv.textContent = 'DESCONECTADO';
+                    statusDiv.style.color = '#ff3333';
+                });
+        }
+
+        setInterval(leerDesdeInternet, 1000);
+        leerDesdeInternet();
+    </script>
+</body>
+</html>
