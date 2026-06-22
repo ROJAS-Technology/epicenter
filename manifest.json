@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Epicenter Dashboard",
+  "version": "1.0",
+  "action": {
+    "default_popup": "git_hub_01.html"
+  }
+}
