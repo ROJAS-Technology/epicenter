@@ -23,7 +23,7 @@
 
     <div class="header">
         <h1>The Epicenter</h1>
-        <div id="status" style="color: #ff3333;">DESCONECTADO</div>
+        <div id="status" style="color: #ff3333;">CONECTANDO...</div>
     </div>
 
     <div class="dashboard">
@@ -36,14 +36,13 @@
                         <linearGradient id="gauge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
                             <stop offset="0%" stop-color="#2ecc71" />
                             <stop offset="50%" stop-color="#f1c40f" />
-                            <!--<stop offset="100%" stroke-color="#e74c3c" />-->
                             <stop offset="100%" stop-color="#e74c3c" />
                         </linearGradient>
                     </defs>
                     <!-- Arco de colores del fondo -->
                     <path d="M 25 130 A 105 105 0 0 1 235 130" fill="none" stroke="url(#gauge-grad)" stroke-width="16" stroke-linecap="round"/>
                     
-                    <!-- ARQUITECTURA BLINDADA: La aguja es una línea directa controlada por coordenadas fijas (X2, Y2) -->
+                    <!-- La aguja controlada por coordenadas fijas (X2, Y2) -->
                     <line id="linea-aguja" x1="130" y1="130" x2="30" y2="130" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
                     <circle cx="130" cy="130" r="7" fill="#ffffff"/>
                 </svg>
@@ -63,9 +62,9 @@
         </div>
     </div>
 
-    <!-- BOTÓN DE ACCESO DIRECTO AL PUERTO USB -->
+    <!-- BOTÓN OCULTO DE EMERGENCIA (Solo aparece si el navegador olvida el Arduino) -->
     <div style="text-align: center; margin-top: 30px;">
-        <button id="btn-usb" onclick="conectarArduinoDirecto()" style="background-color: #2ecc71; color: #0d0d0d; border: none; padding: 12px 25px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Conectar Cable Arduino</button>
+        <button id="btn-usb" onclick="vincularPuertoPorUnicaVez()" style="display: none; background-color: #2ecc71; color: #0d0d0d; border: none; padding: 12px 25px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 14px; text-transform: uppercase;">Vincular Cable Arduino</button>
     </div>
 
     <script>
@@ -73,23 +72,54 @@
         const tempSpan = document.getElementById('temp');
         const humSpan = document.getElementById('hum');
         const lineaAguja = document.getElementById('linea-aguja');
+        
+        const urlFirebase = "https://firebaseio.com";
+        let usandoCableLocal = false;
 
-        async function conectarArduinoDirecto() {
-            if (!("serial" in navigator)) {
-                alert("Usa Google Chrome o Microsoft Edge.");
-                return;
+        // Mueve tu aguja con tu fórmula intacta
+        function moverMiAguja(tNum) {
+            if(lineaAguja) {
+                const anguloGrad = (tNum * 1.8) - 180;
+                const anguloRad = anguloGrad * (Math.PI / 180);
+                const nuevoX2 = 130 + 100 * Math.cos(anguloRad);
+                const nuevoY2 = 130 + 100 * Math.sin(anguloRad);
+                lineaAguja.setAttribute('x2', nuevoX2);
+                lineaAguja.setAttribute('y2', nuevoY2);
             }
+        }
 
+        // MODO VISOR: Para tu hermano en Brasil (Lee la nube cada segundo)
+        function leerDesdeInternet() {
+            if (usandoCableLocal) return; 
+
+            fetch(urlFirebase)
+                .then(response => response.json())
+                .then(data => {
+                    if (data) {
+                        statusDiv.textContent = 'ONLINE (INTERNET)';
+                        statusDiv.style.color = '#2ecc71';
+                        if(tempSpan) tempSpan.textContent = parseFloat(data.temperatura).toFixed(1);
+                        if(humSpan) humSpan.textContent = parseFloat(data.humedad).toFixed(1);
+                        moverMiAguja(parseFloat(data.temperatura));
+                    }
+                })
+                .catch(e => {
+                    statusDiv.textContent = 'DESCONECTADO';
+                    statusDiv.style.color = '#ff3333';
+                });
+        }
+
+        // PROCESADOR DEL FLUJO DE DATOS DEL ARDUINO NANO
+        async function procesarFlujoCable(puerto) {
             try {
-                const puerto = await navigator.serial.requestPort();
                 await puerto.open({ baudRate: 9600 });
-                
-                statusDiv.textContent = 'ONLINE (CABLE DIRECTO)';
+                usandoCableLocal = true;
+                statusDiv.textContent = 'ONLINE (CABLE DIRECTO + ENVIANDO)';
                 statusDiv.style.color = '#2ecc71';
                 document.getElementById('btn-usb').style.display = 'none';
 
                 const textDecoder = new TextDecoderStream();
-                const readableStreamClosed = puerto.readable.pipeTo(textDecoder.writable);
+                puerto.readable.pipeTo(textDecoder.writable);
                 const reader = textDecoder.readable.getReader();
                 
                 let acumuladorBuffer = "";
@@ -100,50 +130,71 @@
                     
                     if (value) {
                         acumuladorBuffer += value;
-                        
                         if (acumuladorBuffer.includes('\n')) {
                             const lineas = acumuladorBuffer.split('\n');
                             const lineaLimpia = lineas.shift().trim();
                             acumuladorBuffer = (lineas.length > 0) ? lineas.pop() : "";
 
                             if (lineaLimpia.includes(',')) {
-                                const fragmentos = lineaLimpia.split(',');
-                                const tRaw = fragmentos.shift();
-                                const hRaw = fragmentos.shift();
-                                
-                                const tNum = parseFloat(tRaw);
-                                const hNum = parseFloat(hRaw);
+                                const fragmentos = lineaLinter = lineaLimpia.split(',');
+                                const tNum = parseFloat(fragmentos.shift());
+                                const hNum = parseFloat(fragmentos.shift());
                                 
                                 if (!isNaN(tNum) && !isNaN(hNum)) {
+                                    // Actualiza tu pantalla local en la PC
                                     if(tempSpan) tempSpan.textContent = tNum.toFixed(1);
                                     if(humSpan) humSpan.textContent = hNum.toFixed(1);
+                                    moverMiAguja(tNum);
                                     
-                                    // SOLUCIÓN MATEMÁTICA REAL: Calculamos la punta exacta de la aguja con trigonometría
-                                    if(lineaAguja) {
-                                        // Rango de 0 a 100°C mapeado exactamente de -180 a 0 grados angulares en radianes
-                                        const anguloGrad = (tNum * 1.8) - 180;
-                                        const anguloRad = anguloGrad * (Math.PI / 180);
-                                        
-                                        // El radio de longitud de la aguja es de 100 píxeles
-                                        const nuevoX2 = 130 + 100 * Math.cos(anguloRad);
-                                        const nuevoY2 = 130 + 100 * Math.sin(anguloRad);
-                                        
-                                        // Redibujamos las coordenadas del extremo de la línea directo en la pantalla
-                                        lineaAguja.setAttribute('x2', nuevoX2);
-                                        lineaAguja.setAttribute('y2', nuevoY2);
-                                    }
+                                    // Manda los números a internet para Brasil en milisegundos
+                                    fetch(urlFirebase, {
+                                        method: "PUT",
+                                        body: JSON.stringify({ temperatura: tNum, humedad: hNum })
+                                    }).catch(e => console.error(e));
                                 }
                             }
                         }
                     }
                 }
-            } catch (error) {
-                console.error(error);
-                statusDiv.textContent = 'DESCONECTADO';
-                statusDiv.style.color = '#ff3333';
-                document.getElementById('btn-usb').style.display = 'inline-block';
+            } catch (err) {
+                console.error(err);
+                usandoCableLocal = false;
             }
         }
+
+        // CONEXIÓN AUTOMÁTICA (Sin hacer clic en nada)
+        async function comprobarConexionDirecta() {
+            if ("serial" in navigator) {
+                const puertosDisponibles = await navigator.serial.getPorts();
+                
+                // Si el navegador ya recuerda tu Arduino de antes, se conecta SOLO
+                if (puertosDisponibles.length > 0) {
+                    procesarFlujoCable(puertosDisponibles[0]);
+                } else {
+                    // Si no lo conoce (como en la cel de tu hermano), actúa como visor
+                    document.getElementById('btn-usb').style.display = 'inline-block';
+                    setInterval(leerDesdeInternet, 1000);
+                    leerDesdeInternet();
+                }
+            } else {
+                // Celulares o navegadores sin cables leen directo de internet
+                setInterval(leerDesdeInternet, 1000);
+                leerDesdeInternet();
+            }
+        }
+
+        // Por si acaso se borró la memoria del navegador, este botón te vuelve a vincular directo
+        async function vincularPuertoPorUnicaVez() {
+            try {
+                const puerto = await navigator.serial.requestPort();
+                procesarFlujoCable(puerto);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Arranca el escaneo directo en frío apenas abres la página
+        comprobarConexionDirecta();
     </script>
 </body>
 </html>
